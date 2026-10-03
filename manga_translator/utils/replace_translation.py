@@ -1253,14 +1253,18 @@ def _refine_mask_winpy(rgbimg, rawmask):
 
         d = dcrf.DenseCRF2D(rgbimg.shape[1], rgbimg.shape[0], n_classes)
 
+        # 双边核必须归一化：未归一化时 pairwise 能量会压倒 unary（0/255 硬掩码经
+        # unary_from_softmax 后前景能量优势仅约 1e-5），CRF 会退化为多数类平滑并把前景抹掉。
+        pairwise_normalization = getattr(dcrf, 'NORMALIZE_SYMMETRIC', 3)
+
         d.setUnaryEnergy(unary)
         d.addPairwiseGaussian(sxy=1, compat=3, kernel=dcrf.DIAG_KERNEL,
-                              normalization=dcrf.NO_NORMALIZATION)
+                              normalization=pairwise_normalization)
 
         d.addPairwiseBilateral(sxy=23, srgb=7, rgbim=rgbimg,
                                compat=20,
                                kernel=dcrf.DIAG_KERNEL,
-                               normalization=dcrf.NO_NORMALIZATION)
+                               normalization=pairwise_normalization)
         Q = d.inference(5)
         res = np.argmax(Q, axis=0).reshape((rgbimg.shape[0], rgbimg.shape[1]))
         crf_mask = np.array(res * 255, dtype=np.uint8)

@@ -80,7 +80,9 @@ from pydensecrf.utils import unary_from_softmax
 
 # 兼容不同版本的 pydensecrf
 DIAG_KERNEL = getattr(dcrf, 'DIAG_KERNEL', 0)
-NO_NORMALIZATION = getattr(dcrf, 'NO_NORMALIZATION', 0)
+# 双边核必须归一化：未归一化时 pairwise 能量会压倒 unary（0/255 硬掩码经
+# unary_from_softmax 后前景能量优势仅约 1e-5），CRF 会退化为多数类平滑并把前景抹掉。
+PAIRWISE_NORMALIZATION = getattr(dcrf, 'NORMALIZE_SYMMETRIC', 3)
 
 def refine_mask(rgbimg, rawmask):
     # Optimization: Early exit for empty or trivial masks
@@ -116,12 +118,12 @@ def refine_mask(rgbimg, rawmask):
 
     d.setUnaryEnergy(unary)
     d.addPairwiseGaussian(sxy=1, compat=3, kernel=DIAG_KERNEL,
-                            normalization=NO_NORMALIZATION)
+                            normalization=PAIRWISE_NORMALIZATION)
 
     d.addPairwiseBilateral(sxy=23, srgb=7, rgbim=rgbimg,
                         compat=20,
                         kernel=DIAG_KERNEL,
-                        normalization=NO_NORMALIZATION)
+                        normalization=PAIRWISE_NORMALIZATION)
     
     # Reverted to 5 steps as per user request to maintain quality.
     Q = d.inference(5)
