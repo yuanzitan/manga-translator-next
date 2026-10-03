@@ -103,6 +103,10 @@
 Phase 5 已改为真实 glyph 墨迹包络和相邻行碰撞布局，见
 `doc/DECISION_h_line_height_2026-07-13.md`。
 
+本仓库补充（2026-10-03）：显式空行改为零高并直接从布局计划中跳过；纯标点行按
+`font_size` 撑高；横排全角标点推进压半格、开括号左移半格贴右。"真实墨迹包络 +
+相邻行碰撞"这一主体结论不变，上述三条是它的局部例外。
+
 当时记录的补偿/反悔手段：
 1. 全局补偿：`render.font_scale_ratio` 配置按需放大
 2. 回退整个 Phase 2：`git checkout -- manga_translator/rendering/__init__.py

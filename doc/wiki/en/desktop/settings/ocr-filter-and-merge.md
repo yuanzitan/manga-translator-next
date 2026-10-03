@@ -49,14 +49,14 @@ Offline models load on the selected device; API engines need their API configura
 
 #### Hybrid OCR {#hybrid-ocr}
 
-When the “Enable Hybrid OCR” toggle is enabled, lines for which the primary OCR returns empty text or a value below “Text Region Min Probability” are handed to “Secondary OCR” for replacement; common filtering and merging still follow. The secondary model/API must be available, and loading, requests, and latency increase. Default: Enable Hybrid OCR `false`; Secondary OCR `mocr`.
+When the “Enable Hybrid OCR” toggle is enabled, lines for which the primary OCR returns empty text or a value below “Text Region Min Probability” are handed to “Secondary OCR” for replacement; common filtering and merging still follow. The secondary model/API must be available, and loading, requests, and latency increase. The secondary engine’s acceptance threshold is controlled separately by “Secondary OCR Min Probability” and falls back to the primary “Text Region Min Probability” when left empty. Default: Enable Hybrid OCR `false`; Secondary OCR `mocr`.
 
 ```mermaid
 flowchart TD
-    A["Primary OCR"] --> B{"Empty text or prob below threshold?"}
+    A["Primary OCR"] --> B{"Empty text or prob below ocr.prob?"}
     B -->|No| C["Keep primary result"]
     B -->|Yes, hybrid off| D["Drop text line"]
-    B -->|Yes, hybrid on| E["Secondary OCR"]
+    B -->|Yes, hybrid on| E["Secondary OCR (internal threshold secondary_prob)"]
     E --> F["Replace failed line"]
     C --> G["Common filtering and merge"]
     F --> G
@@ -64,7 +64,11 @@ flowchart TD
 
 #### Text Region Min Probability {#ocr-prob}
 
-“Text Region Min Probability” is a nullable numeric field. Lines below this value are dropped or sent to the hybrid fallback; it controls both hybrid fallback and per-line post-OCR filtering, and it is not the detector’s “Text Threshold”. A high value triggers more fallback and drops more text. Default: `0.1`.
+“Text Region Min Probability” is a nullable numeric field. Primary-OCR lines below this value are dropped or sent to the hybrid fallback; it controls the hybrid fallback trigger and primary-line filtering, and it is not the detector’s “Text Threshold”. A high value triggers more fallback and drops more text. Default: `0.1`.
+
+#### Secondary OCR Min Probability {#ocr-secondary-prob}
+
+“Secondary OCR Min Probability” is a nullable numeric field that only applies when hybrid OCR is on. It is used both as the secondary engine’s internal acceptance threshold and as the final filter for replaced lines; when left empty it reuses the primary “Text Region Min Probability”. Confidence scales differ per engine (VLM backends, for example, return a fixed `0.9`), so an excessive value drops every secondary result. Default: empty (`null` in `config/config-example.json`).
 
 #### Ignore Non-Bubble Text {#ocr-ignore-bubble}
 

@@ -57,8 +57,8 @@ flowchart LR
     T --> L["bboxes_unfiltered_labeled.png\nlabeled/indexed boxes (model-assisted merge on)"]
     T -->|"pre-filtering: bubble etc."| O["ocrs/ subdirectory: perspective-corrected line crop"]
     O --> R["OCR recognition"]
-    R -->|"empty text or low confidence"| H["hybrid OCR: secondary engine re-runs\nwrites into the same ocrs/ dir"]
-    R --> F["filter: empty text / ocr.prob / filter list"]
+    R -->|"empty text or below ocr.prob"| H["hybrid OCR: secondary engine re-runs (threshold secondary_prob)\nwrites into the same ocrs/ dir"]
+    R --> F["filter: empty text / ocr.prob (secondary lines use secondary_prob) / filter list"]
     H --> F
     F -->|"no remaining textlines"| S["skip-no-text early exit\ntext_regions=[]"]
     F --> M["textline merge → text_regions"]
@@ -84,8 +84,8 @@ What `bboxes.png` shows:
 
 ### How filtering and hybrid OCR affect the artifacts {#filter-and-hybrid-effects}
 
-- The filter stage drops empty text, low-confidence lines below `ocr.prob`, and lines matching the filter list (`filter_text_enabled`); dropped lines do not appear in `text_regions` or `bboxes.png`.
-- Hybrid OCR (`ocr.use_hybrid_ocr`) re-runs lines that the primary OCR left empty or below confidence with `ocr.secondary_ocr`; both runs write to `ocrs/`, so indices may collide and be overwritten, and which run the final file keeps must be confirmed per run.
+- The filter stage drops empty text, low-confidence lines below `ocr.prob`, and lines matching the filter list (`filter_text_enabled`); dropped lines do not appear in `text_regions` or `bboxes.png`. Lines replaced through hybrid OCR are judged with `ocr.secondary_prob` instead (falling back to `ocr.prob` when empty).
+- Hybrid OCR (`ocr.use_hybrid_ocr`) re-runs lines that the primary OCR left empty or below `ocr.prob` with `ocr.secondary_ocr`; the secondary engine’s internal threshold and the final filter for replaced lines use `ocr.secondary_prob`. Both runs write to `ocrs/`, so indices may collide and be overwritten, and which run the final file keeps must be confirmed per run.
 - The no-text early exit happens after filtering; `bboxes.png` is then not generated. This does not affect other stage artifacts such as `input.png` or `final.png`.
 
 ## Artifacts and privacy {#dependencies}

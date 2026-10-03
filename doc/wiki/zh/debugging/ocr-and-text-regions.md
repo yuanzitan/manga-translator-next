@@ -57,8 +57,8 @@ flowchart LR
     T --> L["bboxes_unfiltered_labeled.png\n带标签/序号框（开启模型辅助合并）"]
     T -->|"前置过滤：气泡过滤等"| O["ocrs/ 子目录：单行透视矫正裁剪图"]
     O --> R["OCR 识别"]
-    R -->|"空文本或低置信"| H["混合 OCR：备用引擎重识别\n写入同一 ocrs/ 目录"]
-    R --> F["过滤：空文本 / ocr.prob / 过滤列表"]
+    R -->|"空文本或低于 ocr.prob"| H["混合 OCR：备用引擎重识别（阈值 secondary_prob）\n写入同一 ocrs/ 目录"]
+    R --> F["过滤：空文本 / ocr.prob（备用行按 secondary_prob） / 过滤列表"]
     H --> F
     F -->|"无剩余文本行"| S["skip-no-text 早退\ntext_regions=[]"]
     F --> M["文本行合并 → text_regions"]
@@ -84,8 +84,8 @@ flowchart LR
 
 ### 过滤与混合 OCR 对产物的影响 {#filter-and-hybrid-effects}
 
-- 过滤阶段依次丢弃空文本、低于 `ocr.prob` 的低置信行和命中过滤列表（`filter_text_enabled`）的行；被丢弃的行不会出现在 `text_regions` 与 `bboxes.png` 中。
-- 混合 OCR（`ocr.use_hybrid_ocr`）把主 OCR 空文本或低置信的行交给 `ocr.secondary_ocr` 重新识别，两次运行都会写 `ocrs/`，编号可能冲突并被覆盖，因此同一编号最终保留哪次结果需要以实际运行为准。
+- 过滤阶段依次丢弃空文本、低于 `ocr.prob` 的低置信行和命中过滤列表（`filter_text_enabled`）的行；被丢弃的行不会出现在 `text_regions` 与 `bboxes.png` 中。走混合 OCR 并被替换的行改用 `ocr.secondary_prob`（留空时回退 `ocr.prob`）判定。
+- 混合 OCR（`ocr.use_hybrid_ocr`）把主 OCR 空文本或低于 `ocr.prob` 的行交给 `ocr.secondary_ocr` 重新识别，备用引擎内部阈值与替换行的最终过滤使用 `ocr.secondary_prob`；两次运行都会写 `ocrs/`，编号可能冲突并被覆盖，因此同一编号最终保留哪次结果需要以实际运行为准。
 - 无文本早退发生在过滤之后，此时 `bboxes.png` 不生成；这不影响 `input.png`、`final.png` 等其他阶段产物。
 
 ## 产物与隐私 {#dependencies}

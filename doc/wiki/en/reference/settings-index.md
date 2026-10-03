@@ -88,6 +88,7 @@ The 17 parameters of this tab are explained in [OCR, Filtering, and Text-Line Me
 | `ocr.model_bubble_overlap_threshold` | Model Bubble Overlap Threshold | 模型气泡重叠阈值 | [#model-bubble-filter](../desktop/settings/ocr-filter-and-merge.md#model-bubble-filter) |
 | `filter_text_enabled` | Enable Filter List | 启用过滤列表 | [#filter-text-enabled](../desktop/settings/ocr-filter-and-merge.md#filter-text-enabled) |
 | `ocr.prob` | Text Region Min Probability | 文本区域最低概率 (prob) | [#ocr-prob](../desktop/settings/ocr-filter-and-merge.md#ocr-prob) |
+| `ocr.secondary_prob` | Secondary OCR Min Probability | 备用OCR最低概率 (secondary_prob) | [#ocr-secondary-prob](../desktop/settings/ocr-filter-and-merge.md#ocr-secondary-prob) |
 | `ocr.merge_gamma` | Merge Distance Tolerance | 合并-距离容忍度 | [#merge-tolerances](../desktop/settings/ocr-filter-and-merge.md#merge-tolerances) |
 | `ocr.merge_sigma` | Merge Outlier Tolerance | 合并-离群容忍度 | [#merge-tolerances](../desktop/settings/ocr-filter-and-merge.md#merge-tolerances) |
 | `ocr.merge_edge_ratio_threshold` | Merge Edge Ratio Threshold | 合并-边缘距离比例阈值 | [#merge-edge-ratio](../desktop/settings/ocr-filter-and-merge.md#merge-edge-ratio) |

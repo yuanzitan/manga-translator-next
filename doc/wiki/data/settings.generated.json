@@ -752,6 +752,29 @@
       "verification_status": "Phase 0 UI/default evidence catalogued; final consumer trace pending"
     },
     {
+      "key": "ocr.secondary_prob",
+      "ui": {
+        "tab": "OCR",
+        "i18n_key": "label_secondary_prob",
+        "english": "Secondary OCR Min Probability",
+        "simplified_chinese": "备用OCR最低概率 (secondary_prob)"
+      },
+      "wiki_page": "desktop/settings/ocr-filter-and-merge.md",
+      "control": "optional-input",
+      "defaults": {
+        "release_json_value": null,
+        "source": "config/config-example.json (release) -> desktop_qt_ui/core/config_models.py#OcrSettings.secondary_prob"
+      },
+      "lifecycle_stages": [
+        "OCR",
+        "merge/filter"
+      ],
+      "file_action": false,
+      "consumers": [],
+      "consumer_status": "pending Phase 3 source trace",
+      "verification_status": "Phase 0 UI/default evidence catalogued; final consumer trace pending"
+    },
+    {
       "key": "ocr.merge_gamma",
       "ui": {
         "tab": "OCR",

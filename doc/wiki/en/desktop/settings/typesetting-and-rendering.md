@@ -74,6 +74,10 @@ Enter a color in the “Font Color” field: leave it empty for automatic (uses 
 
 “Line Spacing” and “Letter Spacing” accept a multiplier from 0.1–5.0; empty falls back to the renderer default. Default: `1.0`.
 
+#### Horizontal Punctuation and Line Height {#horizontal-punctuation-and-line-height}
+
+Horizontal layout places real glyph ink; this repository adds three fixed exceptions on top. Full-width punctuation (`，。、！？；：` and open/close brackets) advances at `0.5em` while keeping the full-width glyph, and open brackets shift half a cell left so their ink hugs the following text. Explicit empty lines (consecutive newlines, a trailing `[BR]`) have zero line height and are skipped from the layout plan entirely, so they no longer push the body up. A line that contains only punctuation or symbols once whitespace is removed (Unicode categories P/S, for example `。`, `…`, `!!`) has its line box raised to `font_size`, matching text lines. Vertical layout is unaffected, and every other horizontal case still uses the real-ink envelope.
+
 #### Line Breaking
 
 Seven switches — “Chinese Semantic Line Break”, “AI Line Breaking”, “AI Line Break Auto Enlarge”, “Don't Expand Box on Auto Enlarge”, “AI Line Break Check”, “Trim Around Line Breaks”, and “Disable Hyphenation” — control line breaking. Semantic breaking requires a local model and falls back to normal wrapping when absent; AI line-break options require a supported OpenAI/Gemini translator. Default: all off.

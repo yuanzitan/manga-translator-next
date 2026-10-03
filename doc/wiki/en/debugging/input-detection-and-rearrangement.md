@@ -55,6 +55,10 @@ The rearrangement plan first normalizes along the long side: if `h < w` it trans
 
 When rearranging, the long strip is cut into stripes and packed by `pw_num`: `pw_num` is derived from the "no-downscale stripe count `floor(tgt_size / w)`", the "resolution cap computed from `det_rearrange_min_effective_short_side`", and the "legacy cap `floor(2 * tgt_size / w)`"; each composed batch packs `pw_num` stripes side by side. Each batch is padded and resized to a `tgt_size × tgt_size` square before entering the network. Detection outputs are mapped back to original-image coordinates, and overlapping stripe regions are merged with feather weighting based on distance from the stripe cut edges, so text cut at a seam does not lose boxes.
 
+Adjacent stripes are additionally forced to keep a "minimum overlap of 200px" (`DET_REARRANGE_MIN_OVERLAP`): the stripe count is derived from `max_step = ph - 200`, starts are spread evenly with the first and last pinned to the edges, and the count grows automatically (guarded to 8 rounds) when a neighbouring step still exceeds the cap; `ph_step` is the median of the adjacent steps. The cost is more stripes and more detection time on longer images.
+
+The detection candidate cap defaults to 1000, but it is now applied after scoring, keeping the highest-scoring boxes instead of truncating in `findContours` order; for long images the reassembled contour count far exceeds one page, so the cap is lifted entirely (`max_candidates=None`). Boxes are therefore neither dropped by contour order nor lost past the 1000-box limit, and no zero-filled placeholder boxes are returned.
+
 ```mermaid
 flowchart TD
     A["Long input image (long side h, short side w)"] --> B{"down_scale_ratio = h / tgt_size > 2.5 and asp_ratio = h / w > 3?"}

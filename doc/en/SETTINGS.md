@@ -737,7 +737,9 @@ Older versions grouped the interface into broad settings tabs. In the current de
   - When enabled: the post-processing stage constrains the final repair mask using each model bubble component shrunk by 1% of its shorter side, preventing repair from spilling outside the bubble
   - Use case: protect bubble borders and avoid unwanted repair outside the dialogue box
 
-- **`Text Region Min Probability` (`prob`)**: OCR recognition probability threshold.
+- **`Text Region Min Probability` (`prob`)**: OCR recognition probability threshold. In hybrid OCR it also decides when to fall back to the secondary engine.
+
+- **`Secondary OCR Min Probability` (`secondary_prob`)**: probability threshold for the secondary engine and for replaced lines in hybrid OCR. Empty reuses `prob`.
   - Current UI location: `Settings` -> `OCR` -> `Advanced` -> `Text Region Min Probability`
 
 - **`Merge Distance Tolerance` (`merge_gamma`)**: distance tolerance for merging text regions.

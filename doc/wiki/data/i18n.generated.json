@@ -5450,8 +5450,14 @@
     },
     {
       "key": "desc_ocr_prob",
-      "en_US": "OCR recognition probability threshold (0-1). Text below this value is filtered out.",
-      "zh_CN": "OCR 识别概率阈值 (0-1)。低于此值的文本会被过滤掉。",
+      "en_US": "Primary OCR recognition probability threshold (0-1). Text below this value is filtered out; in hybrid OCR it also decides when to fall back to the secondary OCR.",
+      "zh_CN": "主 OCR 识别概率阈值 (0-1)。低于此值的文本会被过滤掉；混合 OCR 下也作为触发备用 OCR 的条件。",
+      "status": "exact"
+    },
+    {
+      "key": "desc_ocr_secondary_prob",
+      "en_US": "Secondary OCR probability threshold (0-1) for hybrid OCR. Applies only to secondary OCR internal and final filtering. Leave empty to reuse ocr.prob.",
+      "zh_CN": "混合 OCR 时备用 OCR 的识别概率阈值 (0-1)。仅作用于备用 OCR 的内部过滤与最终过滤；留空则沿用主 OCR 的 ocr.prob。",
       "status": "exact"
     },
     {
@@ -6874,6 +6880,12 @@
       "key": "label_prob",
       "en_US": "Text Region Min Probability",
       "zh_CN": "文本区域最低概率 (prob)",
+      "status": "exact"
+    },
+    {
+      "key": "label_secondary_prob",
+      "en_US": "Secondary OCR Min Probability",
+      "zh_CN": "备用OCR最低概率 (secondary_prob)",
       "status": "exact"
     },
     {

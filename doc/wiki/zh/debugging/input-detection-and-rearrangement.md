@@ -55,6 +55,10 @@ lastUpdated: true
 
 重排时把长条切成若干条带，并按 `pw_num` 打包：`pw_num` 由“不缩放的条带数 `floor(tgt_size / w)`”、“按 `det_rearrange_min_effective_short_side` 计算的分辨率上限”与“legacy 上限 `floor(2 * tgt_size / w)`”共同决定，每个组成批次包含 `pw_num` 个竖条并排。每个批次补边缩放到 `tgt_size × tgt_size` 正方形后送入网络。检测输出回映到原图坐标，条带重叠区按“离条带切割边缘的距离”羽化加权合并，避免被切断文字在接缝处丢框。
 
+相邻条带的起点还强制满足“最小重叠 200px”（`DET_REARRANGE_MIN_OVERLAP`）：片数按 `max_step = ph - 200` 反推，起点首尾贴边、均匀分布，若仍有相邻步长超过上限就自动增片（最多 8 轮保护），`ph_step` 取相邻步长中位数。代价是条带数与检测耗时随图片变长而增加。
+
+检测候选数量默认上限 1000，但只在打分之后按分数保留最高者，不再按 `findContours` 顺序截断；长图回拼后的轮廓数远超单页，此时上限被取消（`max_candidates=None`）。因此既不会因为轮廓顺序偶然丢框，也不会因为 1000 上限丢掉长图末尾的文本框；同时不再返回占位零框。
+
 ```mermaid
 flowchart TD
     A["输入长图（长边 h，短边 w）"] --> B{"down_scale_ratio = h / tgt_size > 2.5 且 asp_ratio = h / w > 3?"}
