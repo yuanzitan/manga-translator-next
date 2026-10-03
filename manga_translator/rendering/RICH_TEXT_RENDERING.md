@@ -262,3 +262,14 @@ offset、ruby 和 emphasis 都在同一个计划中。相邻行按完整 paint �
   - 横排渲染
   - 竖排渲染
 - 编辑器侧本次暂不改；后续应直接编辑 `richtext.v1`，不要再以标记语言字符串作为内部状态。
+
+## 本仓库补充：横排标点压半格与行高例外
+
+- 横排全角标点（`，。、！？；：` 与开/闭括号）通过 `QTextLayout.setFormats` 加负字距，
+  推进压到 `0.5em`，字形保持全角；开括号再左移半格贴右。省略号与破折号不参与。
+- 测量与绘制共用同一 layout（`_horizontal_line`），因此压半格同时影响
+  `_measure_horizontal_text_width`（断行宽度预算）与实际字形位置。
+- 显式空行的行盒为 `Bounds(0, 0, width, 0)`，`_horizontal_line_occupies_slot` 为假时
+  `_build_rich_horizontal_layout` 直接跳过该行；`layouts` 的长度因此不再等于文本行数。
+- 纯标点行（Unicode 类别 P/S）的 body/paint/spacing 三个 bounds 向上撑到 `font_size`，
+  墨迹位置不变。
