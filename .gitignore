@@ -243,3 +243,7 @@ CLAUDE.md
 # Local GitHub command presets
 .github/commands/
 packaging/maintenance_config.json
+
+
+# uv 下载/解包缓存（安装器 UV_CACHE_DIR 默认落点，见 packaging/launch.py:572、:2878）
+packaging/uv_cache/
