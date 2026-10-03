@@ -50,6 +50,7 @@
           "title": "Advanced"
         },
         "ocr.prob",
+        "ocr.secondary_prob",
         "ocr.merge_gamma",
         "ocr.merge_sigma",
         "ocr.merge_edge_ratio_threshold"

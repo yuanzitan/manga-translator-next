@@ -108,6 +108,7 @@ def _translation_plain_text(value) -> str:
 def _has_translation_text(value) -> bool:
     return has_content(value)
 
+
 ARCHIVE_EXTRACT_IMAGE_DIRNAME = 'original_images'
 ARCHIVE_EXTRACT_META_FILENAME = '.extract_meta.json'
 _KEEP_LANG_NONE_VALUES = {'', 'NONE', 'OFF', 'DISABLED'}
@@ -2531,6 +2532,12 @@ class MangaTranslator:
     def _resolve_ocr_prob_threshold(self, config: Config) -> float:
         return config.ocr.prob if config.ocr.prob is not None else 0.1
 
+    def _resolve_secondary_ocr_prob_threshold(self, config: Config) -> float:
+        """备用 OCR 置信度阈值；未单独配置时回退到主 OCR 的 ocr.prob。"""
+        if config.ocr.secondary_prob is not None:
+            return config.ocr.secondary_prob
+        return self._resolve_ocr_prob_threshold(config)
+
     @staticmethod
     def _get_textline_text(textline) -> str:
         return str(getattr(textline, 'text', '') or '')
@@ -2548,21 +2555,37 @@ class MangaTranslator:
             or self._get_textline_prob(textline) < prob_threshold
         )
 
-    def _filter_ocr_textlines(self, config: Config, textlines, prob_threshold: float):
+    def _filter_ocr_textlines(
+        self,
+        config: Config,
+        textlines,
+        prob_threshold: float,
+        *,
+        secondary_indices=None,
+        secondary_prob_threshold: float | None = None,
+    ):
         filtered_textlines = []
         filter_list_count = 0
         low_confidence_count = 0
+        secondary_indices = set(secondary_indices or ())
+        if secondary_prob_threshold is None:
+            secondary_prob_threshold = prob_threshold
 
-        for textline in textlines:
+        for index, textline in enumerate(textlines):
             text = self._get_textline_text(textline)
             if not text.strip():
                 continue
 
             textline_prob = self._get_textline_prob(textline)
-            if textline_prob < prob_threshold:
+            line_threshold = (
+                secondary_prob_threshold if index in secondary_indices else prob_threshold
+            )
+            if textline_prob < line_threshold:
                 low_confidence_count += 1
+                source_label = 'secondary' if index in secondary_indices else 'primary'
                 logger.info(
-                    f'OCR filtered low-confidence text line: prob={textline_prob:.4f} < threshold={prob_threshold:.4f}, text="{text}"'
+                    f'OCR filtered low-confidence text line ({source_label}): '
+                    f'prob={textline_prob:.4f} < threshold={line_threshold:.4f}, text="{text}"'
                 )
                 continue
 
@@ -2618,6 +2641,8 @@ class MangaTranslator:
             os.environ['MANGA_OCR_RESULT_DIR'] = ocr_result_dir
         
         ocr_prob_threshold = self._resolve_ocr_prob_threshold(config)
+        secondary_prob_threshold = self._resolve_secondary_ocr_prob_threshold(config)
+        secondary_indices = set()
 
         try:
             # --- Primary OCR run ---
@@ -2638,7 +2663,7 @@ class MangaTranslator:
             # --- BEGIN: HYBRID OCR LOGIC ---
             if config.ocr.use_hybrid_ocr:
                 # Identify textlines that failed recognition or have low confidence
-                # 判断失败条件：文本为空 或 置信度低于阈值
+                # 判断失败条件：文本为空 或 置信度低于主 OCR 阈值
                 failed_indices = [
                     i for i, tl in enumerate(textlines) 
                     if self._textline_needs_secondary_ocr(tl, ocr_prob_threshold)
@@ -2647,11 +2672,20 @@ class MangaTranslator:
                 if failed_indices:
                     # Use textlines[i] instead of ctx.textlines[i] because OCR may have changed the order
                     failed_textlines = [textlines[i] for i in failed_indices]
-                    logger.info(f"{len(failed_textlines)} textlines failed or have low confidence (< {ocr_prob_threshold}) with primary OCR. Trying secondary OCR...")
+                    logger.info(
+                        f"{len(failed_textlines)} textlines failed or have low confidence "
+                        f"(< {ocr_prob_threshold}) with primary OCR. Trying secondary OCR "
+                        f"(secondary_prob={secondary_prob_threshold})..."
+                    )
                     
                     secondary_ocr_engine = config.ocr.secondary_ocr
-                    # We can reuse the same config object, just switching the engine
-                    secondary_config = config.ocr
+                    # 备用 OCR 使用独立的 secondary_prob；未设置时沿用主 OCR 的 prob
+                    if config.ocr.secondary_prob is not None:
+                        secondary_config = config.ocr.model_copy(
+                            update={"prob": config.ocr.secondary_prob}
+                        )
+                    else:
+                        secondary_config = config.ocr
                     
                     secondary_ocr_name = secondary_ocr_engine.value if hasattr(secondary_ocr_engine, 'value') else secondary_ocr_engine
                     logger.info(f"Running secondary OCR with: {secondary_ocr_name}")
@@ -2668,7 +2702,8 @@ class MangaTranslator:
                     
                     # Merge the results back into the original list
                     for i, result_tl in zip(failed_indices, secondary_results):
-                        textlines[i] = result_tl # Replace the failed textline with the new result
+                        textlines[i] = result_tl  # Replace the failed textline with the new result
+                        secondary_indices.add(i)
                     
                     logger.info("Secondary OCR processing finished.")
                     
@@ -2690,7 +2725,13 @@ class MangaTranslator:
             elif 'MANGA_OCR_RESULT_DIR' in os.environ:
                 del os.environ['MANGA_OCR_RESULT_DIR']
 
-        return self._filter_ocr_textlines(config, textlines, ocr_prob_threshold)
+        return self._filter_ocr_textlines(
+            config,
+            textlines,
+            ocr_prob_threshold,
+            secondary_indices=secondary_indices,
+            secondary_prob_threshold=secondary_prob_threshold,
+        )
 
     async def _run_textline_merge(self, config: Config, ctx: Context):
         current_time = time.time()

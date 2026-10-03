@@ -450,7 +450,9 @@ class OcrConfig(BaseModel):
     limit_mask_dilation_to_bubble_mask: bool = False
     """Clip refined-mask connected components by model bubble mask: intersecting components keep only intersection; non-intersecting components are preserved."""
     prob: float | None = None
-    """Minimum probability of a text region to be considered valid. If None, uses the model default."""
+    """Minimum probability of a text region to be considered valid for the primary OCR. If None, uses the model default."""
+    secondary_prob: float | None = None
+    """Minimum probability for the secondary OCR in hybrid mode. If None, falls back to ocr.prob."""
     merge_gamma: float = 0.8
     """Textline merge distance tolerance, higher is more tolerant."""
     merge_sigma: float = 2.5

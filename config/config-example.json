@@ -54,6 +54,7 @@
     "use_model_bubble_repair_intersection": false,
     "limit_mask_dilation_to_bubble_mask": true,
     "prob": 0.1,
+    "secondary_prob": null,
     "merge_gamma": 0.8,
     "merge_sigma": 2.5,
     "merge_edge_ratio_threshold": 0.0,

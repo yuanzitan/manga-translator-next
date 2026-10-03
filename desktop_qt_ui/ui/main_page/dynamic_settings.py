@@ -209,6 +209,7 @@ _OPTIONAL_INPUT_KEYS = frozenset({
     "font_size",
     "ocr_vl_custom_prompt",
     "ai_ocr_custom_prompt",
+    "secondary_prob",
 })
 
 _LEGACY_SETTING_SECTIONS = (
@@ -564,6 +565,9 @@ def _setting_control_kind(full_key: str, key: str, value, options, display_map) 
         return "font-action"
     if isinstance(value, bool):
         return "toggle-action" if full_key == "use_custom_api_params" else "toggle"
+    # secondary_prob 在 None / float 间切换时保持控件类型稳定
+    if key == "secondary_prob" and (value is None or isinstance(value, (int, float))):
+        return "optional-input"
     if isinstance(value, float):
         return "float-input"
     if isinstance(value, int):
@@ -1266,6 +1270,11 @@ def _create_param_widgets(self, data, parent_layout, prefix=""):
             
             widget.currentTextChanged.connect(lambda text, k=full_key: self._on_upscale_ratio_changed(text, k))
         
+        elif key == 'secondary_prob' and (value is None or isinstance(value, (int, float))):
+            widget = QLineEdit("" if value is None else str(value))
+            widget.setPlaceholderText(self._t("placeholder_secondary_prob"))
+            widget.editingFinished.connect(lambda k=full_key, w=widget: self._on_numeric_input_changed(w.text(), k, float))
+
         elif isinstance(value, (int, float)):
             widget = QLineEdit(str(value))
             widget.editingFinished.connect(lambda k=full_key, w=widget: self._on_numeric_input_changed(w.text(), k, float if isinstance(value, float) else int))
