@@ -549,11 +549,13 @@ def _layout_font(font_size: int, letter_spacing: float) -> QFont:
     return QFont(qfont)
 
 
-def _create_text_layout(text: str, font_size: int, letter_spacing: float = 1.0):
+def _create_text_layout(text: str, font_size: int, letter_spacing: float = 1.0, formats=None):
     qfont = _layout_font(font_size, letter_spacing)
     if not text:
         return text, qfont, None, None
     layout = QTextLayout(text, qfont)
+    if formats:
+        layout.setFormats(formats)
     layout.beginLayout()
     line = layout.createLine()
     if not line.isValid():

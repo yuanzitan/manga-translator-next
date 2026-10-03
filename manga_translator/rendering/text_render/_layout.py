@@ -8,13 +8,14 @@
 import itertools
 import math
 import re
+import unicodedata
 from dataclasses import replace
 from time import perf_counter
 
 import cv2
 import numpy as np
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QFontMetricsF, QPainterPath, QTransform
+from PyQt6.QtGui import QFont, QFontMetricsF, QPainterPath, QTextCharFormat, QTextLayout, QTransform
 
 from ..rich_text import RenderSpan, RichTextDocument, TextStyle, normalize_rich_linebreaks
 from ._compose import (
@@ -69,6 +70,51 @@ _HORIZONTAL_SYMBOL_HALFWIDTH_MAP = str.maketrans({"！": "!", "？": "?"})
 # Keep join controls in horizontal strings for QTextLayout shaping. In the
 # per-character vertical path they have neither ink nor a character slot.
 _ZERO_WIDTH_JOIN_CONTROLS = frozenset(("\u200c", "\u200d"))
+
+# 横排半格：保留全角字形，推进压到 0.5em。开括号再左移半格以贴右（靠近后文）。
+# 不包含省略号、破折号。已是半角或更窄的不拉宽。
+_HORIZONTAL_OPEN_BRACKETS = frozenset("（「『【《〈〔［｛〝")
+_HORIZONTAL_CLOSE_BRACKETS = frozenset("）」』】》〉〕］｝〞＂＇")
+_HORIZONTAL_HALF_ADVANCE_CHARS = (
+    frozenset("，。、．,.！？!?：；:;")
+    | _HORIZONTAL_OPEN_BRACKETS
+    | _HORIZONTAL_CLOSE_BRACKETS
+)
+
+
+def _is_horizontal_punctuation_text(text: str) -> bool:
+    """整行去掉空白后是否只剩标点/符号（不含字母、数字、汉字）。"""
+    stripped = "".join(ch for ch in (text or "") if not ch.isspace())
+    if not stripped:
+        return False
+    return all(unicodedata.category(ch)[0] in ("P", "S") for ch in stripped)
+
+
+def _expand_bounds_to_font_size_height(bounds: Bounds, font_size: int) -> Bounds:
+    """把行盒高度撑到至少字号，墨迹位置不变，多出来的空间向上扩。
+
+    横排句号等标点墨迹靠基线，向上扩后标点仍落在字号行格下半，接近汉字行高。
+    已高于字号的行（汉字、感叹号等）原样返回。左右不改，压半格不受影响。
+    """
+    height = float(bounds.bottom) - float(bounds.top)
+    target = float(max(int(font_size), 1))
+    if height >= target:
+        return bounds
+    return Bounds(
+        bounds.left,
+        bounds.top - (target - height),
+        bounds.right,
+        bounds.bottom,
+    )
+
+
+def _horizontal_line_occupies_slot(line: HorizontalLinePlan) -> bool:
+    """空段落行高为 0，不参与行推进。"""
+    body_h = float(line.body_bounds.bottom) - float(line.body_bounds.top)
+    paint_h = float(line.paint_bounds.bottom) - float(line.paint_bounds.top)
+    return body_h > 0 or paint_h > 0
+
+
 # 普通自动旋转字符已移到 rich_text_rules.yaml。四个弯引号与四个日文
 # 角引号保留渲染引擎特殊路径：自动旋转 90°，再做顶右/底左定位。
 _VERTICAL_ROTATE_OPEN_SPECIALS = {"“", "‘", "「", "『"}
@@ -355,8 +401,62 @@ def _forced_vertical_advance(font_size: int, mode: str | None) -> int | None:
     return None
 
 
+def _horizontal_punct_half_adjustments(
+    text: str, font_size: int, letter_spacing: float, qfont: QFont
+) -> list[tuple[int, str, float]]:
+    """返回需要压半格的 (下标, 字符, 压缩量)。压缩量 = 原推进 - 0.5em。"""
+    if not text:
+        return []
+    target = max(1.0, float(font_size) * 0.5 * _normalize_letter_spacing(letter_spacing))
+    base = QFont(qfont)
+    base.setLetterSpacing(QFont.SpacingType.PercentageSpacing, 100.0)
+    metrics = QFontMetricsF(base)
+    items = []
+    for index, char in enumerate(text):
+        if char not in _HORIZONTAL_HALF_ADVANCE_CHARS:
+            continue
+        natural = float(metrics.horizontalAdvance(char))
+        if natural <= target + 0.5:
+            continue
+        items.append((index, char, natural - target))
+    return items
+
+
+def _horizontal_punct_half_formats(text: str, font_size: int, letter_spacing: float, qfont: QFont):
+    """给宽于半格的横排标点加负字距，使 QTextLayout 推进为 0.5em。"""
+    ranges = []
+    for index, _char, shrink in _horizontal_punct_half_adjustments(
+        text, font_size, letter_spacing, qfont
+    ):
+        fmt = QTextCharFormat()
+        fmt.setFontLetterSpacingType(QFont.SpacingType.AbsoluteSpacing)
+        fmt.setFontLetterSpacing(-shrink)
+        item = QTextLayout.FormatRange()
+        item.start = index
+        item.length = 1
+        item.format = fmt
+        ranges.append(item)
+    return ranges
+
+
+def _horizontal_open_bracket_shifts(
+    text: str, font_size: int, letter_spacing: float, qfont: QFont
+) -> dict[int, float]:
+    """开括号在压半格后还需左移，使墨迹贴在半格右侧（靠近后文）。"""
+    return {
+        index: shrink
+        for index, char, shrink in _horizontal_punct_half_adjustments(
+            text, font_size, letter_spacing, qfont
+        )
+        if char in _HORIZONTAL_OPEN_BRACKETS
+    }
+
+
 def _horizontal_line(text: str, font_size: int, letter_spacing: float = 1.0):
-    return _create_text_layout(text or "", font_size, letter_spacing)
+    text = text or ""
+    qfont = _layout_font(font_size, letter_spacing)
+    formats = _horizontal_punct_half_formats(text, font_size, letter_spacing, qfont)
+    return _create_text_layout(text, font_size, letter_spacing, formats)
 
 
 def _line_logical_width(line) -> float:
@@ -415,6 +515,13 @@ def _horizontal_glyph_path(
     path = QPainterPath()
     path.setFillRule(Qt.FillRule.WindingFill)
     stage_t0 = perf_counter() if profile_stats is not None else None
+    qfont = _layout_font(font_size, letter_spacing)
+    open_shifts = _horizontal_open_bracket_shifts(normalized, font_size, letter_spacing, qfont)
+    shift_at = {}
+    for index, shrink in open_shifts.items():
+        for glyph_run in layout.glyphRuns(index, 1):
+            for pos in glyph_run.positions():
+                shift_at[(round(pos.x(), 4), round(pos.y(), 4))] = shrink
     for glyph_run in layout.glyphRuns():
         raw_font = glyph_run.rawFont()
         for glyph_id, pos in zip(glyph_run.glyphIndexes(), glyph_run.positions()):
@@ -423,7 +530,8 @@ def _horizontal_glyph_path(
                 continue
             if shear_transform is not None:
                 glyph_path = shear_transform.map(glyph_path)
-            glyph_path.translate(pos.x(), pos.y())
+            shift = shift_at.get((round(pos.x(), 4), round(pos.y(), 4)), 0.0)
+            glyph_path.translate(pos.x() - shift, pos.y())
             path.addPath(glyph_path)
     path = _scale_path_about_center(path, scale_x, scale_y)
     _profile_add(profile_stats, "tr_path_ms", stage_t0)
@@ -946,8 +1054,8 @@ def _finalize_rich_horizontal_line(
 
     logical_width = sum(run.logical_width for run in runs)
     if not paint_rects:
-        half = max(float(base_font_size), 1.0) / 2.0
-        bounds = Bounds(0.0, -half, logical_width, half)
+        # 空段落不占行高：零高行盒，布局层会跳过，避免尾部 [BR] 把正文顶上去。
+        bounds = Bounds(0.0, 0.0, logical_width, 0.0)
         return HorizontalLinePlan(
             tuple(runs),
             logical_width,
@@ -972,14 +1080,25 @@ def _finalize_rich_horizontal_line(
         spacing_rects or body_rects or paint_rects
     )
     paint_left, paint_top, paint_right, paint_bottom = bounds(paint_rects)
+    body_bounds = Bounds(body_left, body_top, body_right, body_bottom)
+    paint_bounds = Bounds(paint_left, paint_top, paint_right, paint_bottom)
+    spacing_bounds = Bounds(spacing_left, spacing_top, spacing_right, spacing_bottom)
+    line_text = "".join(run.span.text or "" for run in runs)
+    if _is_horizontal_punctuation_text(line_text):
+        # 仅标点行按字号行高；字形墨迹不动，压半格只改横向推进。
+        body_bounds = _expand_bounds_to_font_size_height(body_bounds, base_font_size)
+        paint_bounds = _expand_bounds_to_font_size_height(paint_bounds, base_font_size)
+        spacing_bounds = _expand_bounds_to_font_size_height(
+            spacing_bounds, base_font_size
+        )
     return HorizontalLinePlan(
         tuple(runs),
         logical_width,
-        Bounds(body_left, body_top, body_right, body_bottom),
-        Bounds(paint_left, paint_top, paint_right, paint_bottom),
+        body_bounds,
+        paint_bounds,
         line_kerning,
         next_kerning,
-        Bounds(spacing_left, spacing_top, spacing_right, spacing_bottom),
+        spacing_bounds,
     )
 
 
@@ -1028,11 +1147,12 @@ def _build_rich_horizontal_layout(
                     run.ruby = ruby_paint
             runs.append(run)
         line_kerning, next_kerning = _paragraph_line_spacing_values(paragraph)
-        layouts.append(
-            _finalize_rich_horizontal_line(
-                runs, base_font_size, letter_spacing, line_kerning, next_kerning
-            )
+        line = _finalize_rich_horizontal_line(
+            runs, base_font_size, letter_spacing, line_kerning, next_kerning
         )
+        if not _horizontal_line_occupies_slot(line):
+            continue
+        layouts.append(line)
     return layouts
 
 
