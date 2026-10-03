@@ -109,6 +109,19 @@ def _has_translation_text(value) -> bool:
     return has_content(value)
 
 
+_IDENTICAL_TRANSLATION_BREAK_RE = re.compile(
+    r'(?:\[BR\]|【BR】|<br\s*/?>)',
+    re.IGNORECASE,
+)
+
+
+def _normalize_for_identical_translation_compare(text: str) -> str:
+    """去掉换行标记和全部空白，仅用于原文/译文是否相同的判断，不改存储文本。"""
+    text = _IDENTICAL_TRANSLATION_BREAK_RE.sub('', str(text or ''))
+    text = re.sub(r'\s+', '', text)
+    return text.lower()
+
+
 ARCHIVE_EXTRACT_IMAGE_DIRNAME = 'original_images'
 ARCHIVE_EXTRACT_META_FILENAME = '.extract_meta.json'
 _KEEP_LANG_NONE_VALUES = {'', 'NONE', 'OFF', 'DISABLED'}
@@ -5313,7 +5326,11 @@ class MangaTranslator:
         """Keep identical text when no_text_lang_skip is enabled."""
         if getattr(config.translator, 'no_text_lang_skip', False):
             return False
-        return str(region.text or '').lower().strip() == _translation_plain_text(region.translation).lower().strip()
+        original = _normalize_for_identical_translation_compare(region.text)
+        translated = _normalize_for_identical_translation_compare(
+            _translation_plain_text(region.translation)
+        )
+        return original == translated
             
     async def _apply_post_translation_processing(self, ctx: Context, config: Config) -> List:
         """
