@@ -1395,6 +1395,9 @@ def square_pad_resize(img: np.ndarray, tgt_size: int):
 
     return img, down_scale_ratio, pad_h, pad_w
 
+# 长图检测切割：相邻条带强制最小重叠像素（少切缝切字）
+DET_REARRANGE_MIN_OVERLAP = 200
+
 def build_det_rearrange_plan(
     img: np.ndarray,
     tgt_size: int = 1280,
@@ -1403,6 +1406,8 @@ def build_det_rearrange_plan(
     """
     Build a shared rearrange plan for long-image detection.
     Returns None if rearrangement is not required.
+
+    相邻条带强制最小重叠 DET_REARRANGE_MIN_OVERLAP，其余触发/短边密排逻辑不变。
     """
     h, w = img.shape[:2]
     transpose = False
@@ -1431,18 +1436,41 @@ def build_det_rearrange_plan(
     pw_num = max(no_downscale_pw_num, min(max_pw_num_by_resolution, max_pw_num_by_legacy_cap))
     patch_size = ph = pw_num * w
 
-    ph_num = int(np.ceil(h / ph))
-    if ph_num > 1:
-        start_positions = [int(round(pos)) for pos in np.linspace(0, h - ph, ph_num)]
-        ph_step = int(round((h - ph) / (ph_num - 1)))
-    else:
-        start_positions = [0]
+    # max_step = ph - MIN_OVERLAP，反推片数；起点均匀、首尾贴边
+    min_overlap = int(min(DET_REARRANGE_MIN_OVERLAP, max(1, ph - 1)))
+    max_step = max(1, ph - min_overlap)
+
+    if h <= ph:
+        ph_num = 1
+        starts = [0]
         ph_step = 0
+    else:
+        ph_num = int(np.ceil((h - ph) / float(max_step))) + 1
+        ph_num = max(ph_num, 2)
+        span = h - ph
+        starts = [int(round(i * span / float(ph_num - 1))) for i in range(ph_num)]
+        starts[0] = 0
+        starts[-1] = span
+
+        def _max_adjacent_step(vals):
+            return max(vals[i + 1] - vals[i] for i in range(len(vals) - 1))
+
+        guard = 0
+        while _max_adjacent_step(starts) > max_step and guard < 8:
+            ph_num += 1
+            starts = [int(round(i * span / float(ph_num - 1))) for i in range(ph_num)]
+            starts[0] = 0
+            starts[-1] = span
+            guard += 1
+
+        steps = [starts[i + 1] - starts[i] for i in range(ph_num - 1)]
+        ph_step = int(np.median(steps)) if steps else 0
+
     rel_step_list = []
     patch_list = []
-    for t in start_positions:
+    for t in starts:
         b = t + ph
-        rel_step_list.append(t / h)
+        rel_step_list.append(t / float(h))
         patch_list.append(img_for_split[t:b])
 
     p_num = int(np.ceil(ph_num / pw_num))
