@@ -207,6 +207,12 @@ manga_translator_work/
 desktop_qt_ui/manga_chapter_splitter/
 启动章节分割工具.bat
 
+# Launcher scripts (启动脚本 - 不进版本库, 本机保留在磁盘, 见 AGENTS.md 踩坑记录)
+/Win-Start.bat
+/Win-Install-or-Update.bat
+/Unix-Start.sh
+/Unix-Install-or-Update.sh
+
 # User uploaded resources (用户上传的字体和提示词)
 manga_translator/server/user_resources/
 
