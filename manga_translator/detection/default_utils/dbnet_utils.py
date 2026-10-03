@@ -11,8 +11,30 @@ class SegDetectorRepresenter():
         self.min_size = 3
         self.thresh = thresh
         self.box_thresh = box_thresh
+        # None / <=0：不限制数量。有上限时也必须先打分再按分数截，禁止按 findContours 顺序切。
         self.max_candidates = max_candidates
         self.unclip_ratio = unclip_ratio
+
+    def _candidate_limit(self):
+        cap = self.max_candidates
+        if cap is None:
+            return None
+        try:
+            cap = int(cap)
+        except (TypeError, ValueError):
+            return None
+        return cap if cap > 0 else None
+
+    def _keep_top_by_score(self, boxes, scores):
+        """数量上限只在打分之后生效，保留分数最高的框。"""
+        cap = self._candidate_limit()
+        n = len(scores)
+        if cap is None or n <= cap:
+            return boxes, scores
+        order = np.argsort(np.asarray(scores, dtype=np.float64))[::-1][:cap]
+        if isinstance(boxes, list):
+            return [boxes[int(i)] for i in order], [scores[int(i)] for i in order]
+        return np.asarray(boxes)[order], np.asarray(scores)[order]
 
     def __call__(self, batch, pred, is_output_polygon=False):
         '''
@@ -61,7 +83,7 @@ class SegDetectorRepresenter():
 
         contours, _ = cv2.findContours((bitmap * 255).astype(np.uint8), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
 
-        for contour in contours[:self.max_candidates]:
+        for contour in contours:
             epsilon = 0.005 * cv2.arcLength(contour, True)
             approx = cv2.approxPolyDP(contour, epsilon, True)
             points = approx.reshape((-1, 2))
@@ -93,7 +115,7 @@ class SegDetectorRepresenter():
             box[:, 1] = np.clip(np.round(box[:, 1] / height * dest_height), 0, dest_height)
             boxes.append(box)
             scores.append(score)
-        return boxes, scores
+        return self._keep_top_by_score(boxes, scores)
 
     def boxes_from_bitmap(self, pred, _bitmap, dest_width, dest_height):
         '''
@@ -111,13 +133,12 @@ class SegDetectorRepresenter():
         try:
             contours, _ = cv2.findContours((bitmap * 255).astype(np.uint8), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
         except ValueError:
-            return [], []
-        num_contours = min(len(contours), self.max_candidates)
-        boxes = np.zeros((num_contours, 4, 2), dtype=np.int64)
-        scores = np.zeros((num_contours,), dtype=np.float32)
+            return np.zeros((0, 4, 2), dtype=np.int64), np.zeros((0,), dtype=np.float32)
 
-        for index in range(num_contours):
-            contour = contours[index].squeeze(1)
+        kept_boxes = []
+        kept_scores = []
+        for contour in contours:
+            contour = contour.squeeze(1)
             points, sside = self.get_mini_boxes(contour)
             if sside < self.min_size:
                 continue
@@ -140,9 +161,14 @@ class SegDetectorRepresenter():
             startidx = box.sum(axis=1).argmin()
             box = np.roll(box, 4-startidx, 0)
             box = np.array(box)
-            boxes[index, :, :] = box.astype(np.int64)
-            scores[index] = score
-        return boxes, scores
+            kept_boxes.append(box.astype(np.int64))
+            kept_scores.append(score)
+
+        if not kept_boxes:
+            return np.zeros((0, 4, 2), dtype=np.int64), np.zeros((0,), dtype=np.float32)
+        boxes = np.array(kept_boxes, dtype=np.int64)
+        scores = np.array(kept_scores, dtype=np.float32)
+        return self._keep_top_by_score(boxes, scores)
 
     def unclip(self, box, unclip_ratio=1.8):
         poly = Polygon(box)

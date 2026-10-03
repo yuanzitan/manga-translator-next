@@ -61,6 +61,7 @@ class ReplaceTranslationCTD:
             verbose
         )
         
+        rearranged = lines_map is not None
         if lines_map is None:
             img_in, ratio, dw, dh = preprocess_img(
                 image, 
@@ -81,6 +82,7 @@ class ReplaceTranslationCTD:
             lines_map = lines_map[..., :lines_map.shape[2]-dh, :lines_map.shape[3]-dw]
         
         mask = postprocess_mask(mask)
+        self.detector.seg_rep.max_candidates = None if rearranged else 1000
         lines, scores = self.detector.seg_rep(None, lines_map, height=im_h, width=im_w)
         box_thresh = 0.6
         idx = np.where(scores[0] > box_thresh)

@@ -87,6 +87,7 @@ class DefaultDetector(OfflineDetector):
             min_effective_short_side=det_rearrange_min_effective_short_side,
         )
 
+        rearranged = db is not None
         if db is None:
             # rearrangement is not required, fallback to default forward
             img_resized, target_ratio, _, pad_w, pad_h = imgproc.resize_aspect_ratio(cv2.bilateralFilter(image, 17, 80, 80), detect_size, cv2.INTER_LINEAR, mag_ratio = 1)
@@ -210,7 +211,13 @@ class DefaultDetector(OfflineDetector):
                 self.logger.error(f'Failed to create bbox debug image from mask: {e}')
         
         # 正常的检测流程（使用box_threshold）
-        det = dbnet_utils.SegDetectorRepresenter(text_threshold, box_threshold, unclip_ratio=unclip_ratio)
+        # 长图回拼后轮廓远超单页，取消数量上限；单页仍保留 1000，但 representer 会按分数截。
+        det = dbnet_utils.SegDetectorRepresenter(
+            text_threshold,
+            box_threshold,
+            max_candidates=None if rearranged else 1000,
+            unclip_ratio=unclip_ratio,
+        )
         boxes, scores = det({'shape':[(img_resized_h, img_resized_w)]}, db)
         boxes, scores = boxes[0], scores[0]
         

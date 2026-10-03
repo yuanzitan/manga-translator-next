@@ -161,6 +161,7 @@ class ComicTextDetector(OfflineDetector):
             result_path_fn,
             min_effective_short_side=det_rearrange_min_effective_short_side,
         )
+        rearranged = lines_map is not None
         # blks = []
         # resize_ratio = [1, 1]
         if lines_map is None:
@@ -179,6 +180,7 @@ class ComicTextDetector(OfflineDetector):
             lines_map = lines_map[..., :lines_map.shape[2]-dh, :lines_map.shape[3]-dw]
 
         mask = postprocess_mask(mask)
+        self.seg_rep.max_candidates = None if rearranged else 1000
         lines, scores = self.seg_rep(None, lines_map, height=im_h, width=im_w)
         box_thresh = 0.6
         idx = np.where(scores[0] > box_thresh)
