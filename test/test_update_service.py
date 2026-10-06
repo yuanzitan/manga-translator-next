@@ -126,6 +126,7 @@ def test_automatic_full_update_skips_confirmation(monkeypatch):
         "check_all_updates",
         lambda: (False, True, None, None, None, ["example-package"]),
     )
+    monkeypatch.setattr(maintenance_launch, "update_code_force", lambda **_kwargs: True)
     monkeypatch.setattr(
         maintenance_launch,
         "update_runtime_dependencies",
@@ -142,6 +143,63 @@ def test_automatic_full_update_skips_confirmation(monkeypatch):
     args = type("Args", (), {"requirements": "auto"})()
     assert maintenance_launch.run_full_update(args, automatic=True)
     assert dependency_updates == [["example-package"]]
+
+
+def test_full_update_force_syncs_code_even_when_commits_match(monkeypatch):
+    code_syncs = []
+    monkeypatch.setattr(
+        maintenance_launch,
+        "check_all_updates",
+        lambda: (False, False, "v1", "v1", "cpu", []),
+    )
+    monkeypatch.setattr(
+        maintenance_launch,
+        "update_code_force",
+        lambda **kwargs: code_syncs.append(kwargs) or True,
+    )
+    monkeypatch.setattr(
+        maintenance_launch,
+        "cleanup_runtime_dependencies",
+        lambda _variant: True,
+    )
+    monkeypatch.setattr("builtins.input", lambda *_args, **_kwargs: "y")
+
+    args = type("Args", (), {"requirements": "auto"})()
+    assert maintenance_launch.run_full_update(args)
+    assert code_syncs == [{"skip_confirm": True}]
+
+
+def test_full_update_restarts_when_force_sync_moves_head(monkeypatch):
+    commits = iter(["aaa", "bbb"])
+    events = []
+    monkeypatch.setattr(
+        maintenance_launch,
+        "check_all_updates",
+        lambda: (False, True, "v1", "v1", "cpu", ["example-package"]),
+    )
+    monkeypatch.setattr(
+        maintenance_launch,
+        "_git_output",
+        lambda args, **_kwargs: next(commits) if args[:2] == ["rev-parse", "HEAD"] else None,
+    )
+    monkeypatch.setattr(maintenance_launch, "update_code_force", lambda **_kwargs: True)
+    monkeypatch.setattr(
+        maintenance_launch,
+        "restart_maintenance",
+        lambda action: events.append(action),
+    )
+    monkeypatch.setattr(
+        maintenance_launch,
+        "update_runtime_dependencies",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("dependency update must wait until restart")
+        ),
+    )
+    monkeypatch.setattr("builtins.input", lambda *_args, **_kwargs: "y")
+
+    args = type("Args", (), {"requirements": "auto"})()
+    assert maintenance_launch.run_full_update(args)
+    assert events == ["update"]
 
 
 def test_restart_desktop_ui_uses_current_maintenance_interpreter(monkeypatch):

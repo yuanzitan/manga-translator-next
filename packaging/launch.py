@@ -3047,18 +3047,11 @@ def run_install(args):
 
 
 def run_full_update(args, automatic=False):
-    """更新代码和依赖；桌面端自动更新时跳过二次确认。"""
-    code_needs_update, deps_needs_update, _, _, req_file, missing_packages = check_all_updates()
-    if not code_needs_update and not deps_needs_update:
-        if not cleanup_runtime_dependencies(req_file):
-            return False
-        print()
-        print(L("[信息] 代码和依赖都已是最新，已完成残留依赖清理",
-                "[INFO] Code and dependencies are current; stale dependencies were cleaned"))
-        return True
+    """更新代码和依赖；桌面端自动更新时跳过二次确认。
 
-
-
+    代码同步不因本地/远程 commit 一致而跳过，始终强制拉取 origin。
+    """
+    _, deps_needs_update, _, _, req_file, missing_packages = check_all_updates()
 
     print()
     if not automatic:
@@ -3074,31 +3067,33 @@ def run_full_update(args, automatic=False):
     print(L("开始更新", "Starting update"))
     print("=" * 40)
 
-    if code_needs_update:
+    print()
+    print(L("[1/2] 更新代码（强制同步远程，不因提交一致而跳过）...",
+            "[1/2] Updating code (force-sync remote; do not skip when commits match)..."))
+    head_before = _git_output(["rev-parse", "HEAD"])
+    if not update_code_force(skip_confirm=True):
+        print(L("[错误] 代码更新失败，跳过依赖更新",
+                "[ERROR] Code update failed; skipping dependency update"))
         print()
-        print(L("[1/2] 更新代码...", "[1/2] Updating code..."))
-        if not update_code_force(skip_confirm=True):
-            print(L("[错误] 代码更新失败，跳过依赖更新",
-                    "[ERROR] Code update failed; skipping dependency update"))
-            print()
-            print("=" * 40)
-            print(L("[失败] 更新未完成，请修复问题后重试",
-                    "[FAILED] Update was not completed; fix the problem and retry"))
-            print("=" * 40)
-            return False
-        else:
-            restart_maintenance('update')
-            return True
-    else:
-        print()
-        print(L("[1/2] 代码已是最新，跳过", "[1/2] Code already up to date, skipping"))
+        print("=" * 40)
+        print(L("[失败] 更新未完成，请修复问题后重试",
+                "[FAILED] Update was not completed; fix the problem and retry"))
+        print("=" * 40)
+        return False
+    head_after = _git_output(["rev-parse", "HEAD"])
+    if head_before != head_after:
+        restart_maintenance('update')
+        return True
 
     if deps_needs_update:
         if not update_runtime_dependencies(args, req_file, missing_packages):
             return False
     else:
+        if not cleanup_runtime_dependencies(req_file):
+            return False
         print()
-        print(L("[2/2] 依赖已满足，跳过", "[2/2] Dependencies satisfied, skipping"))
+        print(L("[信息] 代码已强制同步，依赖已满足，已完成残留依赖清理",
+                "[INFO] Code was force-synced; dependencies are current; stale dependencies were cleaned"))
         print()
         print("=" * 40)
         print(L("[完成] 更新完成", "[DONE] Update complete"))

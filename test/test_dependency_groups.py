@@ -281,11 +281,13 @@ def test_full_update_cleans_stale_dependencies_when_everything_is_current(monkey
         "check_all_updates",
         lambda: (False, False, "v1", "v1", "cpu", []),
     )
+    monkeypatch.setattr(launch, "update_code_force", lambda **_kwargs: True)
     monkeypatch.setattr(
         launch,
         "cleanup_runtime_dependencies",
         lambda variant: cleanup_calls.append(variant) or True,
     )
+    monkeypatch.setattr("builtins.input", lambda *_args, **_kwargs: "y")
 
     assert launch.run_full_update(args)
     assert cleanup_calls == ["cpu"]
