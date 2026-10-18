@@ -1610,6 +1610,20 @@ def det_unrearrange_patch_maps(
         p = _to_chw_patch(patch, data_format)
         if transpose:
             p = einops.rearrange(p, 'c h w -> c w h')
+        # 检测缩放后的拼块宽度常不能被条数整除（如 1024/5=204.8），按取整条宽切条会让第 jj 条
+        # 起点少算 jj 倍的小数部分并逐条累积（长图蒙版最多右偏十余像素）；
+        # 先横向重采样到「条数 × 整数条宽」再切条。能整除时（如蒙版精修的原分辨率拼块）不做处理。
+        packed_w = int(p.shape[-1])
+        stripe_w = max(int(round(packed_w / pw_num)), 1)
+        if packed_w != stripe_w * pw_num:
+            p = np.stack([
+                cv2.resize(
+                    np.ascontiguousarray(channel, dtype=np.float32),
+                    (stripe_w * pw_num, int(channel.shape[0])),
+                    interpolation=cv2.INTER_LINEAR,
+                )
+                for channel in p
+            ])
         return p
 
     patch0 = _to_internal_patch(patch_lst[0])
